@@ -2213,6 +2213,14 @@ func.func @torch.aten.index_select$noop(%arg0 : !torch.vtensor<[1,2,3],si64>, %a
   return %0 : !torch.vtensor<[1,2,3],si64>
 }
 
+// Should not be folded, as indices is not of size 1. 
+// CHECK-LABEL:   func.func @torch.aten.index_select$same_result_shape(
+// CHECK: torch.aten.index_select
+func.func @torch.aten.index_select$same_result_shape(%arg0 : !torch.vtensor<[1,2,3],si64>, %arg1 : !torch.int, %arg2 : !torch.vtensor<[2],si64>) -> !torch.vtensor<[1,2,3],si64> {
+  %0 = torch.aten.index_select %arg0, %arg1, %arg2 : !torch.vtensor<[1,2,3],si64>, !torch.int, !torch.vtensor<[2],si64> -> !torch.vtensor<[1,2,3],si64>
+  return %0 : !torch.vtensor<[1,2,3],si64>
+}
+
 // CHECK-LABEL:   func.func @torch.aten.index_select$const_si_si(
 // CHECK-NEXT:      %[[RES:.*]] = torch.vtensor.literal(dense<60> : tensor<1xsi64>) : !torch.vtensor<[1],si64>
 // CHECK-NEXT:      return %[[RES]] : !torch.vtensor<[1],si64>
@@ -2221,17 +2229,6 @@ func.func @torch.aten.index_select$const_si_si() -> !torch.vtensor<[1],si64> {
   %dim = torch.constant.int 0
   %index = torch.vtensor.literal(dense<5> : tensor<1xsi64>) : !torch.vtensor<[1],si64>
   %0 = torch.aten.index_select %tensor, %dim, %index : !torch.vtensor<[10],si64>, !torch.int, !torch.vtensor<[1],si64> -> !torch.vtensor<[1],si64>
-  return %0 : !torch.vtensor<[1],si64>
-}
-
-// CHECK-LABEL:   func.func @torch.aten.index_select$const_si_ui(
-// CHECK-NEXT:      %[[RES:.*]] = torch.vtensor.literal(dense<60> : tensor<1xsi64>) : !torch.vtensor<[1],si64>
-// CHECK-NEXT:      return %[[RES]] : !torch.vtensor<[1],si64>
-func.func @torch.aten.index_select$const_si_ui() -> !torch.vtensor<[1],si64> {
-  %tensor = torch.vtensor.literal(dense<[10,20,30,40,50,60,70,80,90,100]> : tensor<10xsi64>) : !torch.vtensor<[10],si64>
-  %dim = torch.constant.int 0
-  %index = torch.vtensor.literal(dense<5> : tensor<1xui64>) : !torch.vtensor<[1],ui64>
-  %0 = torch.aten.index_select %tensor, %dim, %index : !torch.vtensor<[10],si64>, !torch.int, !torch.vtensor<[1],ui64> -> !torch.vtensor<[1],si64>
   return %0 : !torch.vtensor<[1],si64>
 }
 

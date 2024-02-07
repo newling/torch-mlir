@@ -199,23 +199,22 @@ static Value getScalarFloatValue(Value input, Location loc,
   return nullptr;
 }
 
-int64_t mlir::torch::Torch::getIntAttrAsSigned(IntegerAttr intAttr) {
-  if (intAttr.getType().isSignedInteger())
-    return intAttr.getSInt();
-  if (intAttr.getType().isUnsignedInteger())
-    return int64_t(intAttr.getUInt());
-  if (intAttr.getType().isSignlessInteger())
-    return intAttr.getInt(); // signless returns as int64_t
-  assert(false && "Unhandled integer attribute type");
-  return 0;
-}
+static std::optional<uint64_t> getIntAttrAsIndex(IntegerAttr intAttr,
+                                                 int dimSize) {
 
-int64_t mlir::torch::Torch::getIntAttrAsIndex(IntegerAttr intAttr,
-                                              int dimSize) {
-  int64_t signedIndex = getIntAttrAsSigned(intAttr);
-  if (dimSize < 0 || signedIndex > 0)
-    return signedIndex;
-  return dimSize - (-signedIndex);
+  if (intAttr.getType().isUnsignedInteger())
+    return intAttr.getValue().getZExtValue();
+
+  int64_t signedIndex = intAttr.getValue().getSExtValue();
+
+  // If intAttr's value is negative, use the provided static dimension  size
+  // 'dimSize' to convert the negative value to a positive value, else fail.
+  if (signedIndex < 0) {
+    if (dimSize < 0)
+      return std::nullopt;
+    signedIndex = dimSize - (-signedIndex);
+  }
+  return static_cast<int64_t>(signedIndex);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2861,9 +2860,9 @@ OpFoldResult AtenDivIntOp::fold(FoldAdaptor adaptor) {
 OpFoldResult AtenIndexSelectOp::fold(FoldAdaptor adaptor) {
   auto self = getSelf();
   auto index = getIndex();
-  auto selfTy = dyn_cast_or_null<ValueTensorType>(self.getType());
-  auto indexTy = dyn_cast_or_null<ValueTensorType>(index.getType());
-  auto resultTy = dyn_cast_or_null<ValueTensorType>(getType());
+  auto selfTy = dyn_cast<ValueTensorType>(self.getType());
+  auto indexTy = dyn_cast<ValueTensorType>(index.getType());
+  auto resultTy = dyn_cast<ValueTensorType>(getType());
   if (!selfTy || !indexTy || !resultTy)
     return nullptr;
 
@@ -2931,7 +2930,12 @@ OpFoldResult AtenIndexSelectOp::fold(FoldAdaptor adaptor) {
 
   // Get the single index value for the selected dimension
   auto splatValue = indexAttr.getSplatValue<IntegerAttr>();
-  int64_t indexInt = getIntAttrAsIndex(splatValue, selfSizes[dimInt]);
+  auto optionalIndexInt = getIntAttrAsIndex(splatValue, selfSizes[dimInt]);
+  if (!optionalIndexInt.has_value()) {
+    return nullptr;
+  }
+
+  auto indexInt = optionalIndexInt.value();
 
   // Extract the single constant value from the input tensor and turn the
   // extracted value into a single-element tensor of the output shape and dtype
